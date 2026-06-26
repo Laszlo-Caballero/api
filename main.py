@@ -374,10 +374,28 @@ def run_tray():
 # UVICORN
 # --------------------
 def run_api():
+    from tkinter import messagebox
     config = load_config()
     host = config.get("host", "0.0.0.0")
     port = config.get("port", 2314)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    try:
+        logger.info(f"Starting API on {host}:{port}")
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    except Exception as e:
+        logger.error(f"Failed to start API: {e}")
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "Error de API", 
+                f"No se pudo iniciar la API en {host}:{port}.\n\n"
+                f"Detalle del error: {e}\n\n"
+                "Asegúrate de que el puerto no esté en uso por otra instancia "
+                "del servicio o que la dirección IP sea correcta."
+            )
+            root.destroy()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
