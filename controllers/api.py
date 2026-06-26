@@ -1,0 +1,122 @@
+import logging
+from pathlib import Path
+import pandas as pd
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from utils.config import load_config
+from services.db_service import get_sqlite_connection, get_access_connection
+
+logger = logging.getLogger("api")
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
+
+@app.get("/maquina-a/{id}")
+async def get_maquina_a(id: str):
+    config = load_config()
+    maquina_a = config.get("maquina_a", "")
+    if not maquina_a:
+        return {"error": "Maquina A path is not configured"}
+
+    file_path = Path(maquina_a).joinpath("dbreport.nii").resolve()
+    conn = get_access_connection(file_path)
+
+    if not conn:
+        return {"error": "Maquina A no disponible"}
+
+    try:
+        query = f"""
+                select p.exid,pt.assayid, pt.assayname, rd.rlu, pt.answer, r.unit, rd.enddate, rd.endtime
+                    from 
+                    ((((patient p inner join patientrecord pt on p.id = pt.patientid)
+                    inner join journal j on j.patientid = p.id)
+                    inner join result r on r.journalid = j.id and r.asyid = pt.assayid)
+                    inner join resultdetail rd on rd.resultid = r.id)
+                    WHERE 
+                        p.exid = '{id}'
+                """
+        df = pd.read_sql_query(query, conn)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        logger.error(f"Error querying Maquina A: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+@app.get("/maquina-b/{id}")
+async def get_maquina_b(id: str):
+    config = load_config()
+    maquina_b = config.get("maquina_b", "")
+    origen_maquina_b = config.get("origen_maquina_b", "")
+
+    primary_db = Path(maquina_b).joinpath("User.db").resolve() if maquina_b else None
+    fallback_db = Path(origen_maquina_b).joinpath("User.db").resolve() if origen_maquina_b else None
+
+    conn, source = get_sqlite_connection(primary_db, fallback_db)
+
+    if conn is None:
+        return {"error": "No database available"}
+
+    logger.info(f"Connected using: {source}")
+
+    try:
+        query = f"""
+            select p.id, e.id as idexamen, p.barcode, e.Abbr, r.result, u.name, r.resultTime  from smpinfo p
+            inner join smpresult r on r.smpinfodbid = p.id
+            inner join iteminfo e on e.id = r.itemdbid
+            inner join unit u on u.id = e.unitid
+            where p.barcode like '%{id}%'
+        """
+        df = pd.read_sql_query(query, conn)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        logger.error(f"Error querying Maquina B: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+@app.get("/maquina-b-count")
+async def get_maquina_b_count():
+    config = load_config()
+    maquina_b = config.get("maquina_b", "")
+    origen_maquina_b = config.get("origen_maquina_b", "")
+
+    primary_db = Path(maquina_b).joinpath("User.db").resolve() if maquina_b else None
+    fallback_db = Path(origen_maquina_b).joinpath("User.db").resolve() if origen_maquina_b else None
+
+    conn, source = get_sqlite_connection(primary_db, fallback_db)
+
+    if conn is None:
+        return {"error": "No database available"}
+
+    try:
+        query = """
+            select count(*) as count from smpinfo p
+            inner join smpresult r on r.smpinfodbid = p.id
+            inner join iteminfo e on e.id = r.itemdbid
+            inner join unit u on u.id = e.unitid        
+        """
+        df = pd.read_sql_query(query, conn)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        logger.error(f"Error querying Maquina B Count: {e}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
