@@ -1,4 +1,8 @@
 {
     "maquina_a": "C:/Users/laszlo/Downloads/a",
-    "maquina_b": "C:/Users/laszlo/Downloads/a"
+    "maquina_b": "C:/Users/laszlo/Downloads/a",
+    "origen_maquina_b": "C:/Users/laszlo/Downloads/a/remote",
+    "host": "0.0.0.0",
+    "port": 2314,
+    "sync_interval": 120
 }
