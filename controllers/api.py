@@ -19,18 +19,29 @@ app.add_middleware(
     allow_credentials=True,
 )
 
+
 @app.get("/maquina-a/{id}")
 async def get_maquina_a(id: str):
     config = load_config()
     maquina_a = config.get("maquina_a", "")
     if not maquina_a:
+        logger.warning("Maquina A path is not configured in config.json")
         return {"error": "Maquina A path is not configured"}
 
     file_path = Path(maquina_a).joinpath("dbreport.nii").resolve()
-    conn = get_access_connection(file_path)
+    logger.info(f"Querying Maquina A for id: {id}")
+    logger.info(f"Connecting to Access DB at: {file_path}")
+    
+    conn = None
+    try:
+        conn = get_access_connection(file_path)
+    except Exception as e:
+        logger.error(f"Error during get_access_connection: {e}", exc_info=True)
+        return {"error": f"Error conectando a Maquina A: {e}"}
 
     if not conn:
-        return {"error": "Maquina A no disponible"}
+        logger.warning("Maquina A connection is None")
+        return {"error": "Maquina A no disponible (conexión fallida)"}
 
     try:
         query = f"""
@@ -43,16 +54,21 @@ async def get_maquina_a(id: str):
                     WHERE 
                         p.exid = '{id}'
                 """
+        logger.info("Executing query on Access DB...")
         df = pd.read_sql_query(query, conn)
+        logger.info("Query completed successfully")
         return df.to_dict(orient="records")
     except Exception as e:
-        logger.error(f"Error querying Maquina A: {e}")
-        return []
+        logger.error(f"Error querying Maquina A: {e}", exc_info=True)
+        return {"error": f"Error al consultar Maquina A: {e}"}
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            logger.info("Closing Access DB connection")
+            try:
+                conn.close()
+            except Exception as e:
+                logger.error(f"Error closing Access DB connection: {e}", exc_info=True)
+
 
 @app.get("/maquina-b/{id}")
 async def get_maquina_b(id: str):
@@ -61,14 +77,18 @@ async def get_maquina_b(id: str):
     origen_maquina_b = config.get("origen_maquina_b", "")
 
     primary_db = Path(maquina_b).joinpath("User.db").resolve() if maquina_b else None
-    fallback_db = Path(origen_maquina_b).joinpath("User.db").resolve() if origen_maquina_b else None
+    fallback_db = (
+        Path(origen_maquina_b).joinpath("User.db").resolve()
+        if origen_maquina_b
+        else None
+    )
 
     conn, source = get_sqlite_connection(primary_db, fallback_db)
 
     if conn is None:
         return {"error": "No database available"}
 
-    logger.info(f"Connected using: {source}")
+    logger.info(f"Connected to SQLite using: {source}")
 
     try:
         query = f"""
@@ -81,13 +101,15 @@ async def get_maquina_b(id: str):
         df = pd.read_sql_query(query, conn)
         return df.to_dict(orient="records")
     except Exception as e:
-        logger.error(f"Error querying Maquina B: {e}")
+        logger.error(f"Error querying Maquina B: {e}", exc_info=True)
         return []
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 @app.get("/maquina-b-count")
 async def get_maquina_b_count():
@@ -96,7 +118,11 @@ async def get_maquina_b_count():
     origen_maquina_b = config.get("origen_maquina_b", "")
 
     primary_db = Path(maquina_b).joinpath("User.db").resolve() if maquina_b else None
-    fallback_db = Path(origen_maquina_b).joinpath("User.db").resolve() if origen_maquina_b else None
+    fallback_db = (
+        Path(origen_maquina_b).joinpath("User.db").resolve()
+        if origen_maquina_b
+        else None
+    )
 
     conn, source = get_sqlite_connection(primary_db, fallback_db)
 
@@ -113,10 +139,11 @@ async def get_maquina_b_count():
         df = pd.read_sql_query(query, conn)
         return df.to_dict(orient="records")
     except Exception as e:
-        logger.error(f"Error querying Maquina B Count: {e}")
+        logger.error(f"Error querying Maquina B Count: {e}", exc_info=True)
         return []
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass

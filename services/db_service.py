@@ -5,6 +5,7 @@ from pathlib import Path
 
 logger = logging.getLogger("api")
 
+
 def get_sqlite_connection(primary_path, fallback_path=None):
     """
     Attempts to connect to primary SQLite database.
@@ -29,6 +30,7 @@ def get_sqlite_connection(primary_path, fallback_path=None):
                 logger.error(f"Fallback DB failed: {e2}")
     return None, "FAILED"
 
+
 def get_access_connection(path):
     """
     Attempts to connect to Microsoft Access DB.
@@ -42,6 +44,7 @@ def get_access_connection(path):
             conn = pyodbc.connect(conn_str, timeout=5)
             return conn
         else:
+            print(f"Access DB path does not exist or is empty: {path}")
             raise Exception("Access DB path does not exist or is empty")
     except Exception as e:
         logger.error(f"Access DB error: {e}")
