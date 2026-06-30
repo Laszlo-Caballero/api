@@ -64,10 +64,18 @@ async def get_maquina_a(id: str):
     finally:
         if conn:
             logger.info("Closing Access DB connection")
+            temp_path = getattr(conn, "temp_path", None)
             try:
                 conn.close()
             except Exception as e:
                 logger.error(f"Error closing Access DB connection: {e}", exc_info=True)
+            
+            if temp_path and Path(temp_path).exists():
+                try:
+                    Path(temp_path).unlink()
+                    logger.info(f"Deleted temporary DB file: {temp_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting temporary DB file {temp_path}: {e}")
 
 
 @app.get("/maquina-b/{id}")

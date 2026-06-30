@@ -31,21 +31,46 @@ def get_sqlite_connection(primary_path, fallback_path=None):
     return None, "FAILED"
 
 
+import tempfile
+import shutil
+import time
+
 def get_access_connection(path):
     """
     Attempts to connect to Microsoft Access DB.
+    To avoid driver crashes with non-standard extensions (like .nii)
+    and avoid lock errors if the file is in use, we copy it to a temp file
+    with a proper .accdb extension first.
     """
+    temp_path = None
     try:
         if path and Path(path).exists():
+            temp_dir = Path(tempfile.gettempdir())
+            suffix = ".accdb"
+            temp_path = temp_dir / f"temp_access_db_{time.time_ns()}{suffix}"
+            
+            # Copy to temp file
+            shutil.copy2(path, temp_path)
+            logger.info(f"Copied {path} to temporary file {temp_path}")
+            
             conn_str = (
                 r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-                rf"DBQ={path};"
+                rf"DBQ={temp_path};"
             )
             conn = pyodbc.connect(conn_str, timeout=5)
+            # Store temp path on connection object to delete it after closing
+            conn.temp_path = temp_path
             return conn
         else:
-            print(f"Access DB path does not exist or is empty: {path}")
-            raise Exception("Access DB path does not exist or is empty")
+            logger.error(f"Access DB path does not exist or is empty: {path}")
+            return None
     except Exception as e:
-        logger.error(f"Access DB error: {e}")
+        logger.error(f"Access DB error during connection setup: {e}", exc_info=True)
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+                logger.info(f"Cleaned up temp file after error: {temp_path}")
+            except Exception:
+                pass
         return None
+
