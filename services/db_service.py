@@ -45,7 +45,24 @@ def get_access_connection(path):
     temp_path = None
     try:
         if path and Path(path).exists():
+            # Read first 100 bytes to check file type and log it
+            with open(path, "rb") as f:
+                header = f.read(100)
+            
+            logger.info(f"File header hex (first 30 bytes): {header[:30].hex()}")
+            
+            # Check for SQLite magic bytes
+            if b"SQLite format 3" in header:
+                logger.error("CRITICAL: dbreport.nii is actually a SQLite 3 database, NOT a Microsoft Access database! Do not use Microsoft Access Driver.")
+                raise ValueError("dbreport.nii is a SQLite database")
+            
+            # Check for Microsoft Access magic bytes
+            is_access = b"Standard Jet DB" in header or b"Standard ACE DB" in header
+            if not is_access:
+                logger.warning(f"File header does not contain standard Access DB markers ('Standard Jet DB' or 'Standard ACE DB'). Header: {header[:50]}")
+            
             temp_dir = Path(tempfile.gettempdir())
+            # ALWAYS use .accdb or .mdb as extension for the temp file to prevent driver crash
             suffix = ".accdb"
             temp_path = temp_dir / f"temp_access_db_{time.time_ns()}{suffix}"
             
